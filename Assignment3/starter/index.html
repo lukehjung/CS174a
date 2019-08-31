@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+    <link rel="icon" href="assets/fav.ico">
+    <head>
+        <meta charset="UTF-8"/>
+        
+        <title>Ray Tracer</title>
+
+        <script src= "src/math.js" ></script>
+        <script src= "src/core.js" ></script>
+        <script type= "text/javascript" >
+            "use strict"
+
+            document.addEventListener("DOMContentLoaded", function(event) {
+
+                const expected = document.querySelector("#expected-img");
+                const loading = document.querySelector("#loading-img");
+
+                const canvas = document.querySelector("#main-canvas");
+                const context = canvas.getContext("2d");
+
+                // Populate the list of available tests from the manifest
+                const select = document.querySelector("#test-select");
+                fetch("tests/list.json").then(response => response.json()).then(function(json) {
+                    for (let o of json) {
+                        const option = document.createElement('option');
+                        option.value = "tests/" + (option.innerHTML = o);
+                        select.appendChild(option);
+                    }
+                });
+
+                // Do some initial setup for the worker.
+                let startTime;
+                let worker = null;
+
+                document.querySelector("#render-button").addEventListener("click", function onClick(e) {
+
+                    // If our worker is active, terminate it before going any further.
+                    stopRender();
+
+                    // Stop here if no valid test is selected.
+                    if (select.value === "")
+                        return;
+
+                    // Start the test!
+                    const testpath = select.value;
+                    expected.src = testpath + "/expected.png";
+                    loading.style.visibility = "visible";
+
+                    context.clearRect(0, 0, canvas.width, canvas.height);
+
+                    console.log("Starting render for " + testpath);
+
+                    startTime = Date.now();
+
+                    worker = new Worker('src/worker.js');
+                    worker.postMessage("../" + testpath + "/test.js");
+
+                    worker.onmessage = (function(e) {
+                        if (e.data[0] === "finished") {
+                            stopRender();
+                            console.log("Render finished in " + ((Date.now() - startTime) / 1000) + " seconds!")
+                        }
+                        canvas.width = e.data[1].width;
+                        canvas.height = e.data[1].height;
+                        context.putImageData(e.data[1], 0, 0);
+                    });
+
+                });
+
+                document.querySelector("#stop-button").addEventListener("click", function onClick(e) {
+                    console.log("Stopping render.");
+                    stopRender();
+                });
+
+                function stopRender() {
+                    if (worker) {
+                        worker.terminate();
+                        worker = null;
+                    }
+                    loading.style.visibility = "hidden";
+                }
+            });
+        </script>
+    </head>
+    <body>
+        
+        <label for="test-select">Select a test:</label>
+        <select id="test-select">
+            <option value="">--Select--</option>
+        </select>
+        <button id="render-button" type="button">Start Render</button>
+        <button id="stop-button" type="button">Stop Render</button>
+        <img id="loading-img" src="assets/loading.gif" width=20 height=20 style="visibility:hidden"></img>
+
+        <hr>
+
+        <div class="canvas-widget">
+            <p>Rendered: The below is the output of your program.</p>
+            <canvas id="main-canvas"></canvas>
+        </div>
+
+        <hr>
+        <div>
+            <p>Expected: Your program's rendered output should look like the below.</p>
+            <img id="expected-img"></img>
+        </div>
+    </body>
+</html>
